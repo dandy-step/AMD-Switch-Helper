@@ -1,3 +1,4 @@
+//global includes
 #include <windows.h>
 #include <ShObjIdl_core.h>
 #include <ShlObj.h>
@@ -10,42 +11,27 @@
 #include <io.h>
 #include <ctime>
 #include <string>
-#include <winreg.h>
 #include <vector>
 #include <algorithm>
 #include <winsvc.h>
 #include <winuser.h>
-#include <sstream>
+#include <windows.h>
+using namespace std;
 
 #define WIN32_LEAN_AND_MEAN
 #define UNICODE 1
-#define GPU_PERFORMANCE_VALUE L"HighPerfGPUAffinity"
-#define GPU_POWERSAVE_VALUE L"PowerSavGPUAffinity"
-#define GPU_BASED_ON_POWER_SOURCE_VALUE L"GlobalGPUAffinity"
-#define MAX_BACKUP_COUNT 5
 
-using namespace std;
-
+//global vars
 wchar_t workingDir[2048] = L"";
 bool failed = false;
 bool trimBackups = false;
 
-struct BackupSearchResult {
-	FILETIME creationTime = { };
-	std::wstring fileName;
-};
-
-enum class PowerMode {
-	GPU_PERFORMANCE,
-	GPU_POWERSAVE,
-	GPU_BASED_ON_POWER_SOURCE
-};
-
-typedef struct XMLAppEntry {
-	wchar_t* filePath;
-	wchar_t* exeName;
-	PowerMode mode;
-};
+//personal project includes
+#include "AMDSwitchHelper.h"
+#include "RegistryMenu.h"
+#include "RegistryMenu.cpp"
+#include "XMLParsing.h"
+#include "XMLParsing.cpp"
 
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
 	return DefWindowProc(hwnd, uMsg, wParam, lParam);
@@ -53,91 +39,8 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 
 void AddApplicationToXMLFile(HWND, wchar_t*, PowerMode);
 
-void CheckRegistryKeys() {
-	HKEY exefileKey = NULL;
-	HKEY performanceKey = NULL;
-	HKEY powersaveKey = NULL;
-	HKEY basedOnPowerKey = NULL;
-	DWORD keyDisposition = NULL;
-
-	if (RegCreateKeyEx(HKEY_CLASSES_ROOT, L"exefile\\shell\\AMDSwitchHelper", NULL, NULL, REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS, NULL, &exefileKey, &keyDisposition) == ERROR_SUCCESS) {
-		LSTATUS errCode = NULL;
-		wchar_t appMUIVerb[] = L"AMDSwitchHelper";
-		wchar_t appSubCommands[] = L"AMDSwitchHelper.GPUPerformance;AMDSwitchHelper.GPUPowersave;AMDSwitchHelper.GPUBasedOnPowerSource";
-		errCode = RegSetValueEx(exefileKey, L"Icon", NULL, REG_SZ, (BYTE*)workingDir, sizeof(workingDir));
-		errCode = RegSetValueEx(exefileKey, L"MUIVerb", NULL, REG_SZ, (BYTE*)appMUIVerb, sizeof(appMUIVerb));
-		errCode = RegSetValueEx(exefileKey, L"SubCommands", NULL, REG_SZ, (BYTE*)appSubCommands, sizeof(appSubCommands));
-
-		if (RegCreateKeyEx(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\CommandStore\\shell\\AMDSwitchHelper.GPUPerformance", NULL, NULL, REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS | KEY_WOW64_64KEY, NULL, &performanceKey, &keyDisposition) == ERROR_SUCCESS) {
-			HKEY performanceCommand = NULL;
-
-			wchar_t performanceOptionText[] = L"With Dedicated GPU";
-			wchar_t* performanceIconPath = (wchar_t*)calloc(sizeof(workingDir), sizeof(wchar_t));
-			lstrcatW(performanceIconPath, workingDir);
-			lstrcatW(performanceIconPath, L",-1");
-
-			RegSetValueEx(performanceKey, L"", NULL, REG_SZ, (BYTE*)performanceOptionText, sizeof(performanceOptionText));
-			RegSetValueEx(performanceKey, L"Icon", NULL, REG_SZ, (BYTE*)performanceIconPath, lstrlenW(performanceIconPath) * sizeof(wchar_t));
-			if (RegCreateKeyEx(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\CommandStore\\shell\\AMDSwitchHelper.GPUPerformance\\Command", NULL, NULL, REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS | KEY_WOW64_64KEY, NULL, &performanceCommand, &keyDisposition) == ERROR_SUCCESS) {
-				wchar_t commandString[2048] = L"";
-				lstrcatW(commandString, workingDir);
-				lstrcatW(commandString, L" %L GPU_PERFORMANCE");
-
-				RegSetValueEx(performanceCommand, L"", NULL, REG_SZ, (BYTE*)commandString, sizeof(commandString));
-			}
-
-			free(performanceIconPath);
-		}
-
-		if (RegCreateKeyEx(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\CommandStore\\shell\\AMDSwitchHelper.GPUPowersave", NULL, NULL, REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS | KEY_WOW64_64KEY, NULL, &powersaveKey, &keyDisposition) == ERROR_SUCCESS) {
-			HKEY powersaveCommand = NULL;
-			wchar_t powersaveOptionText[] = L"With Integrated GPU";
-			wchar_t* powersaveIconPath = (wchar_t*)calloc(sizeof(workingDir), sizeof(wchar_t));
-			lstrcatW(powersaveIconPath, workingDir);
-			lstrcatW(powersaveIconPath, L",-2");
-
-			RegSetValueEx(powersaveKey, L"", NULL, REG_SZ, (BYTE*)powersaveOptionText, sizeof(powersaveOptionText));
-			RegSetValueEx(powersaveKey, L"Icon", NULL, REG_SZ, (BYTE*)powersaveIconPath, lstrlenW(powersaveIconPath) * sizeof(wchar_t));
-			if (RegCreateKeyEx(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\CommandStore\\shell\\AMDSwitchHelper.GPUPowersave\\Command", NULL, NULL, REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS | KEY_WOW64_64KEY, NULL, &powersaveCommand, &keyDisposition) == ERROR_SUCCESS) {
-				wchar_t commandString[2048] = L"";
-				lstrcatW(commandString, workingDir);
-				lstrcatW(commandString, L" %L GPU_POWERSAVE");
-
-				RegSetValueEx(powersaveCommand, L"", NULL, REG_SZ, (BYTE*)commandString, sizeof(commandString));
-			}
-
-			free(powersaveIconPath);
-		}
-
-		if (RegCreateKeyEx(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\CommandStore\\shell\\AMDSwitchHelper.GPUBasedOnPowerSource", NULL, NULL, REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS | KEY_WOW64_64KEY, NULL, &basedOnPowerKey, &keyDisposition) == ERROR_SUCCESS) {
-			HKEY basedOnPowerCommand = NULL;
-			wchar_t basedOnPowerOptionText[] = L"Based On Power Source";
-			wchar_t* basedOnPowerIconPath = (wchar_t*)calloc(sizeof(workingDir), sizeof(wchar_t));
-			lstrcatW(basedOnPowerIconPath, workingDir);
-			lstrcatW(basedOnPowerIconPath, L",-3");
-
-			RegSetValueEx(basedOnPowerKey, L"", NULL, REG_SZ, (BYTE*)basedOnPowerOptionText, sizeof(basedOnPowerOptionText));
-			RegSetValueEx(basedOnPowerKey, L"Icon", NULL, REG_SZ, (BYTE*)basedOnPowerIconPath, lstrlenW(basedOnPowerIconPath) * sizeof(wchar_t));
-			if (RegCreateKeyEx(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\CommandStore\\shell\\AMDSwitchHelper.GPUBasedOnPowerSource\\Command", NULL, NULL, REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS | KEY_WOW64_64KEY, NULL, &basedOnPowerCommand, &keyDisposition) == ERROR_SUCCESS) {
-				wchar_t commandString[2048] = L"";
-				lstrcatW(commandString, workingDir);
-				lstrcatW(commandString, L" %L GPU_BASED_ON_POWER_SOURCE");
-
-				RegSetValueEx(basedOnPowerCommand, L"", NULL, REG_SZ, (BYTE*)commandString, sizeof(commandString));
-			}
-
-			free(basedOnPowerIconPath);
-		}
-	}
-}
-
 bool TimeSortFunction(BackupSearchResult in, BackupSearchResult _in) {
 	return (in.creationTime.dwHighDateTime < _in.creationTime.dwHighDateTime);
-}
-
-bool TroublePathCheck() {
-	//correct for &amp and other control characters
-	//check for 0xFF1A, warn user
 }
 
 INT WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _In_ LPWSTR pCmdLine, _In_ int nShowCmd) {
@@ -152,8 +55,8 @@ INT WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
 		ShowWindow(windowHandle, NULL);
 
 		//query for necessary programs and paths
-		//check that atiapfxx exists
-		//check that there's a User.blb already
+			//check that atiapfxx exists
+			//check that there's a User.blb already
 
 		HRESULT res;
 		wchar_t* sys32Path = NULL;
@@ -161,11 +64,10 @@ INT WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
 		const wchar_t* blobPath = L"\\ATI\\ACE\\APL\\User.blb";
 
 		//get path for executable
-		wstring test;
-		GetModuleFileName(NULL, workingDir, test.max_size());
+		GetModuleFileName(NULL, workingDir, sizeof(workingDir));
 
 		//work on registry here, since we're stripping the exe name from the working path going forward
-		CheckRegistryKeys();
+		CheckAndUpdateRegistryKeys();
 
 		wcsncpy_s(workingDir, workingDir, (wcsrchr(workingDir, L'\\') + 1) - workingDir);
 
@@ -319,44 +221,44 @@ INT WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
 					}
 
 					//if number of backups exceeds our max, grab all file creation timestamps
-					if (trimBackups) {
-						if (fileCount > MAX_BACKUP_COUNT) {
-							backupFileSearchHandle = FindFirstFile(backupFileSearchPattern.c_str(), &backupFindData);
-							vector<BackupSearchResult> backupTimestamps(fileCount);
-							int fileIterator = 0;
+					//if (trimBackups) {
+					//	if (fileCount > MAX_BACKUP_COUNT) {
+					//		backupFileSearchHandle = FindFirstFile(backupFileSearchPattern.c_str(), &backupFindData);
+					//		vector<BackupSearchResult> backupTimestamps(fileCount);
+					//		int fileIterator = 0;
 
-							while (backupFileSearchHandle != INVALID_HANDLE_VALUE) {
-								backupTimestamps[fileIterator].creationTime = backupFindData.ftCreationTime;
-								backupTimestamps[fileIterator++].fileName += backupFindData.cFileName;
-								if (!FindNextFile(backupFileSearchHandle, &backupFindData)) {
-									if (GetLastError() == ERROR_NO_MORE_FILES) {
-										backupFileSearchHandle = INVALID_HANDLE_VALUE;
-									}
-									else {}
-								}
-							}
+					//		while (backupFileSearchHandle != INVALID_HANDLE_VALUE) {
+					//			backupTimestamps[fileIterator].creationTime = backupFindData.ftCreationTime;
+					//			backupTimestamps[fileIterator++].fileName += backupFindData.cFileName;
+					//			if (!FindNextFile(backupFileSearchHandle, &backupFindData)) {
+					//				if (GetLastError() == ERROR_NO_MORE_FILES) {
+					//					backupFileSearchHandle = INVALID_HANDLE_VALUE;
+					//				}
+					//				else {}
+					//			}
+					//		}
 
-							//sort timestamps
-							sort(backupTimestamps.begin(), backupTimestamps.end(), TimeSortFunction);
+					//		//sort timestamps
+					//		sort(backupTimestamps.begin(), backupTimestamps.end(), TimeSortFunction);
 
-							for (int i = 0; i < MAX_BACKUP_COUNT; i++) {
-								wstring filePath = backupFolderPath.c_str();
-								filePath += backupTimestamps[i].fileName;
-								//filePath += L"\\";
-								filePath += L'\0';
-								SHFILEOPSTRUCT delFileStruct = {};
-								delFileStruct.wFunc = FO_DELETE;
-								delFileStruct.pFrom = filePath.c_str();
-								delFileStruct.fFlags = FOF_NO_UI | FOF_ALLOWUNDO;
-								//SHFileOperation(&delFileStruct);
-								/*if (!RemoveDirectory(filePath.c_str())) {
-									DWORD err = GetLastError();
-									err = err;
-								}*/
-							}
-							backupTimestamps = backupTimestamps;
-						}
-					}
+					//		for (int i = 0; i < MAX_BACKUP_COUNT; i++) {
+					//			wstring filePath = backupFolderPath.c_str();
+					//			filePath += backupTimestamps[i].fileName;
+					//			//filePath += L"\\";
+					//			filePath += L'\0';
+					//			SHFILEOPSTRUCT delFileStruct = {};
+					//			delFileStruct.wFunc = FO_DELETE;
+					//			delFileStruct.pFrom = filePath.c_str();
+					//			delFileStruct.fFlags = FOF_NO_UI | FOF_ALLOWUNDO;
+					//			//SHFileOperation(&delFileStruct);
+					//			/*if (!RemoveDirectory(filePath.c_str())) {
+					//				DWORD err = GetLastError();
+					//				err = err;
+					//			}*/
+					//		}
+					//		backupTimestamps = backupTimestamps;
+					//	}
+					//}
 
 					//tokenize args
 					if (lstrlenW(pCmdLine) > 0) {
@@ -469,157 +371,6 @@ INT WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
 	}
 }
 
-XMLAppEntry* CheckXMLEntryRepeat(XMLAppEntry** entries, int entryCount, wchar_t* filePath, wchar_t* exeName) {
-	for (int i = 0; i < entryCount; i++) {
-		if ((!lstrcmpW(entries[i]->filePath, filePath)) && (!lstrcmpW(entries[i]->exeName, exeName))) {
-			return entries[i];
-		}
-	}
-
-	return ((XMLAppEntry*)NULL);
-}
-
-XMLAppEntry** ParseXMLEntries(FILE* file, int* parsedEntryCount, wchar_t* userFilePath, PowerMode userMode) {
-	XMLAppEntry** appEntries = (XMLAppEntry**)calloc(1024, sizeof(XMLAppEntry*));
-	if (file) {
-		fpos_t fileSize = 0;
-		fseek(file, 0, SEEK_END);
-		fgetpos(file, &fileSize);
-
-		if (fileSize > 0) {
-			bool finished = false;
-			int currEntry = 0;
-			rewind(file);
-
-			wchar_t* entry = (wchar_t*)calloc(1, fileSize * 2);
-			while (!finished) {
-				fgetws(entry, fileSize * 2, file);
-				wchar_t* entryStart = wcsstr(entry, L"<application Title=\"+{path=");
-				if (entryStart != NULL) {
-					wchar_t pathTag[] = L"+{path=";
-					wchar_t exeNameTag[] = L"File=\"";
-					wchar_t* pathStart = (wchar_t*)(wcsstr(entry, pathTag) + lstrlenW(pathTag));
-					wchar_t* exeNameStart = (wchar_t*)(wcsstr(entry, exeNameTag) + lstrlenW(exeNameTag));
-
-					if (pathStart && exeNameStart) {
-						int pathDataSize = (wcsstr(entry, L"}\"") - pathStart);
-						int exeDataSize = (wcsstr(entry, L"\">") - exeNameStart);
-
-						wchar_t* pathData = (wchar_t*)calloc(1, (pathDataSize + 1) * sizeof(wchar_t));
-						wchar_t* exeData = (wchar_t*)calloc(1, (exeDataSize + 1) * sizeof(wchar_t));
-						PowerMode mode = PowerMode::GPU_PERFORMANCE;
-
-						//get the <use>part for the GPU profile
-
-						if (pathData && exeData) {
-							wcsncpy_s(pathData, pathDataSize + 1, pathStart, pathDataSize);
-							wcsncpy_s(exeData, exeDataSize + 1, exeNameStart, exeDataSize);
-
-							//get next line, current GPU setting
-							fgetws(entry, fileSize * 2, file);
-							wchar_t* GPUSettingStart = wcsstr(entry, L"\"PXDynamic\">");
-							if (GPUSettingStart) {
-								GPUSettingStart = wcsstr(GPUSettingStart, L">");
-								GPUSettingStart++;	//advance 1
-								wchar_t* GPUSettingEnd = wcsstr(GPUSettingStart, L"</use>");
-								if (GPUSettingEnd) {
-									wchar_t GPUSettingData[2048] = L"";
-									wcsncpy_s(GPUSettingData, GPUSettingStart, (GPUSettingEnd - GPUSettingStart));
-
-									if (!lstrcmpW(GPU_PERFORMANCE_VALUE, GPUSettingData)) {
-										mode = PowerMode::GPU_PERFORMANCE;
-									}
-									else if (!lstrcmpW(GPU_POWERSAVE_VALUE, GPUSettingData)) {
-										mode = PowerMode::GPU_POWERSAVE;
-									}
-									else if (!lstrcmpW(GPU_BASED_ON_POWER_SOURCE_VALUE, GPUSettingData)) {
-										mode = PowerMode::GPU_BASED_ON_POWER_SOURCE;
-									}
-									else {
-										//uh oh, unrecognized value
-									}
-								}
-								else {
-									//ditto
-								}
-							}
-							else {
-								//failed to find GPUSetting! This should never happen!
-							}
-
-							if (!CheckXMLEntryRepeat(appEntries, currEntry, pathData, exeData)) {
-								appEntries[currEntry] = (XMLAppEntry*)calloc(1, sizeof(XMLAppEntry));
-								appEntries[currEntry]->filePath = pathData;
-								appEntries[currEntry]->exeName = exeData;
-								appEntries[currEntry++]->mode = mode;
-							}
-						}
-					}
-				}
-
-				if (feof(file)) {
-					finished = true;
-
-					//check if executable path that user sent us is already an entry
-					wchar_t* exeName = (wchar_t*)calloc(1, sizeof(wchar_t) * lstrlenW(userFilePath));
-					wchar_t* trimmedPath = (wchar_t*)calloc(1, sizeof(wchar_t) * lstrlenW(userFilePath));
-					wcsncpy_s(exeName, lstrlenW(userFilePath), (wchar_t*)(wcsrchr(userFilePath, L'\\') + 1), (wcsrchr(userFilePath, L'\\') + 1) - userFilePath);
-					wcsncpy_s(trimmedPath, lstrlenW(userFilePath), userFilePath, wcsrchr(userFilePath, L'\\') - userFilePath);
-
-					XMLAppEntry* existingValue = CheckXMLEntryRepeat(appEntries, currEntry, trimmedPath, exeName);
-
-					//if it is, update GPU mode to what user passed; if not, add new entry
-					if (existingValue) {
-						existingValue->mode = userMode;
-					} else {
-						appEntries[currEntry] = (XMLAppEntry*)calloc(1, sizeof(XMLAppEntry));
-						if (appEntries[currEntry]) {
-							appEntries[currEntry]->filePath = trimmedPath;
-							appEntries[currEntry]->exeName = exeName;
-							appEntries[currEntry++]->mode = userMode;
-						} else {
-							//HANDLE: Failed to allocate entry
-						}
-					}
-
-					*parsedEntryCount = currEntry;
-				}
-			}
-
-			free(entry);
-		}
-	}
-
-	return appEntries;
-}
-
-void* GenerateXMLAppEntries(XMLAppEntry** entries, int count) {
-	void* data = calloc(count, sizeof(wchar_t) * 2048);;
-
-	if (data) {
-		for (int i = 0; i < count; i++) {
-			wchar_t powerModeValue[2048] = L"";
-			if (entries[i]->mode == PowerMode::GPU_PERFORMANCE) {
-				wcscat_s(powerModeValue, GPU_PERFORMANCE_VALUE);
-			}
-			else if (entries[i]->mode == PowerMode::GPU_POWERSAVE) {
-				wcscat_s(powerModeValue, GPU_POWERSAVE_VALUE);
-			}
-			else {
-				wcscat_s(powerModeValue, GPU_BASED_ON_POWER_SOURCE_VALUE);
-			}
-
-			int test = lstrlenW(powerModeValue);
-
-			wchar_t appEntryFormattedBuffer[2048] = L"";
-			swprintf_s(appEntryFormattedBuffer, L"\t<application Title=\"+{path=%s}\" File=\"%s\">\n\t\t\t<use Area=\"PXDynamic\">%s</use>\n\t\t</application>\n\t\0", entries[i]->filePath, entries[i]->exeName, powerModeValue);
-			wcscat_s((wchar_t*)data, (2048 * count) - lstrlenW((wchar_t*)data), appEntryFormattedBuffer);
-		}
-	}
-
-	return data;
-}
-
 void AddApplicationToXMLFile(HWND wHandle, wchar_t* filePath, PowerMode mode) {
 	wstring findPath = L"";
 	findPath += workingDir;
@@ -668,7 +419,7 @@ void AddApplicationToXMLFile(HWND wHandle, wchar_t* filePath, PowerMode mode) {
 								rewind(xmlFile);
 								int entryCount = 0;
 								XMLAppEntry** entries = ParseXMLEntries(xmlFile, &entryCount, filePath, mode);
-								void* data = GenerateXMLAppEntries(entries, entryCount);
+								void* data = GenerateXMLAppEntries(wHandle, entries, entryCount);
 
 								FILE* newFile = NULL;
 								wchar_t newFilePath[2048] = L"";
