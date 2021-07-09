@@ -22,6 +22,8 @@ using namespace std;
 #define UNICODE 1
 
 //global vars
+const wchar_t* profilePathFileName = L"\\atiapfxx.exe";
+const wchar_t* blobPath = L"\\ATI\\ACE\\APL\\User.blb";
 wchar_t workingDir[2048] = L"";
 bool failed = false;
 bool trimBackups = false;
@@ -33,14 +35,36 @@ bool trimBackups = false;
 #include "XMLParsing.h"
 #include "XMLParsing.cpp"
 
+//forward declarations
+void AddApplicationToXMLFile(HWND, wchar_t*, PowerMode);
+
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
 	return DefWindowProc(hwnd, uMsg, wParam, lParam);
 }
 
-void AddApplicationToXMLFile(HWND, wchar_t*, PowerMode);
-
 bool TimeSortFunction(BackupSearchResult in, BackupSearchResult _in) {
 	return (in.creationTime.dwHighDateTime < _in.creationTime.dwHighDateTime);
+}
+
+bool CheckApplicationRequirements(HWND windowHandle) {
+	//admin permission check
+	HANDLE procTokenHandle = NULL;
+	if (OpenProcessToken(GetCurrentProcess(), TOKEN_READ, &procTokenHandle)) {
+		TOKEN_ELEVATION elevated;
+		DWORD dataSize = NULL;
+		if (GetTokenInformation(procTokenHandle, TokenElevation, &elevated, sizeof(TOKEN_ELEVATION), &dataSize)) {
+			if (!elevated.TokenIsElevated) {
+				MessageBoxA(windowHandle, "This application needs to run as administrator!", "Error", MB_ICONERROR);
+				return false;
+			}
+		}
+	}
+
+	//profile generator exists check
+	//FindFirstFile()
+	 
+	//user.blb exists check
+	//AMD Event service running check
 }
 
 INT WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _In_ LPWSTR pCmdLine, _In_ int nShowCmd) {
@@ -53,21 +77,27 @@ INT WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
 	HWND windowHandle = CreateWindow(windowClass.lpszClassName, windowClass.lpszClassName, WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, NULL, NULL, hInstance, NULL);
 	if (windowHandle != 0) {
 		ShowWindow(windowHandle, NULL);
+		if (!CheckApplicationRequirements(windowHandle)) {
+			return 0;
+		}
 
 		//query for necessary programs and paths
+			//check that we're running as admin
 			//check that atiapfxx exists
+			//check that AMD Event service is running
 			//check that there's a User.blb already
 
 		HRESULT res;
 		wchar_t* sys32Path = NULL;
-		const wchar_t* fileName = L"\\atiapfxx.exe";
-		const wchar_t* blobPath = L"\\ATI\\ACE\\APL\\User.blb";
 
-		//get path for executable
+		//get working path for executable
 		GetModuleFileName(NULL, workingDir, sizeof(workingDir));
 
 		//work on registry here, since we're stripping the exe name from the working path going forward
-		CheckAndUpdateRegistryKeys();
+		if (lstrlenW(pCmdLine) == 0) {
+			MessageBox(windowHandle, L"No argument passed, working on this path as registry location", L"Info", MB_ICONEXCLAMATION);
+			CheckAndUpdateRegistryKeys();
+		}
 
 		wcsncpy_s(workingDir, workingDir, (wcsrchr(workingDir, L'\\') + 1) - workingDir);
 
@@ -76,7 +106,7 @@ INT WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
 			void* oldRedirectInfo = NULL;
 			wchar_t filePath[1024] = L"";
 			wcscat_s(filePath, sys32Path);
-			wcscat_s(filePath, fileName);
+			wcscat_s(filePath, profilePathFileName);
 			
 			WIN32_FIND_DATA findData = {};
 			Wow64DisableWow64FsRedirection(&oldRedirectInfo);
@@ -219,46 +249,6 @@ INT WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
 							}
 						}
 					}
-
-					//if number of backups exceeds our max, grab all file creation timestamps
-					//if (trimBackups) {
-					//	if (fileCount > MAX_BACKUP_COUNT) {
-					//		backupFileSearchHandle = FindFirstFile(backupFileSearchPattern.c_str(), &backupFindData);
-					//		vector<BackupSearchResult> backupTimestamps(fileCount);
-					//		int fileIterator = 0;
-
-					//		while (backupFileSearchHandle != INVALID_HANDLE_VALUE) {
-					//			backupTimestamps[fileIterator].creationTime = backupFindData.ftCreationTime;
-					//			backupTimestamps[fileIterator++].fileName += backupFindData.cFileName;
-					//			if (!FindNextFile(backupFileSearchHandle, &backupFindData)) {
-					//				if (GetLastError() == ERROR_NO_MORE_FILES) {
-					//					backupFileSearchHandle = INVALID_HANDLE_VALUE;
-					//				}
-					//				else {}
-					//			}
-					//		}
-
-					//		//sort timestamps
-					//		sort(backupTimestamps.begin(), backupTimestamps.end(), TimeSortFunction);
-
-					//		for (int i = 0; i < MAX_BACKUP_COUNT; i++) {
-					//			wstring filePath = backupFolderPath.c_str();
-					//			filePath += backupTimestamps[i].fileName;
-					//			//filePath += L"\\";
-					//			filePath += L'\0';
-					//			SHFILEOPSTRUCT delFileStruct = {};
-					//			delFileStruct.wFunc = FO_DELETE;
-					//			delFileStruct.pFrom = filePath.c_str();
-					//			delFileStruct.fFlags = FOF_NO_UI | FOF_ALLOWUNDO;
-					//			//SHFileOperation(&delFileStruct);
-					//			/*if (!RemoveDirectory(filePath.c_str())) {
-					//				DWORD err = GetLastError();
-					//				err = err;
-					//			}*/
-					//		}
-					//		backupTimestamps = backupTimestamps;
-					//	}
-					//}
 
 					//tokenize args
 					if (lstrlenW(pCmdLine) > 0) {
