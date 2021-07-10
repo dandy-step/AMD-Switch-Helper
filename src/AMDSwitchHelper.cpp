@@ -80,7 +80,7 @@ bool CheckApplicationRequirements(HWND windowHandle) {
 		}
 	}
 	 
-	//user.blb exists check
+	//User.blb exists check
 	WIN32_FIND_DATA findData = {};
 	wchar_t fullBlobPath[2048];
 	GetEnvironmentVariableW(L"LocalAppData", fullBlobPath, sizeof(fullBlobPath) / sizeof(wchar_t));
@@ -88,11 +88,21 @@ bool CheckApplicationRequirements(HWND windowHandle) {
 	HANDLE blobFileHandle = FindFirstFile(fullBlobPath, &findData);
 	if (blobFileHandle == INVALID_HANDLE_VALUE) {
 		FindClose(blobFileHandle);
-		MessageBox(windowHandle, L"Couldn't find existing profile blob - this is to be expected if you have just installed new drivers. Add at least one application manually through Catalyst Control Center to use this app. If you already have and are seeing this, it's likely that your driver version or hardware is unsupported.", L"Error", MB_ICONERROR);
+		MessageBox(windowHandle, L"Couldn't find existing profile blob - this is to be expected if you have just installed new drivers. Add at least one application manually through Catalyst Control Center to use this application. If you already have and are seeing this, it's likely that your driver version or hardware is unsupported.", L"Error", MB_ICONERROR);
 		return false;
 	}
 
-	//AMD Event service running check
+	//AMD Event service exists check
+	wchar_t servicePath[2048] = L"";
+	//GetEnvironmentVariableW(L"LocalAppData", servicePath, sizeof(servicePath) / sizeof(wchar_t));
+	wcscat_s(servicePath, sys32Path);
+	lstrcatW(servicePath, L"\\atiesrxx.exe");
+	HANDLE servFileHandle = FindFirstFile(sys32Path, &findData);
+	if (servFileHandle == INVALID_HANDLE_VALUE) {
+		FindClose(servFileHandle);
+		MessageBox(windowHandle, L"Couldn't find AMD External Events service. It's likely that your driver version or hardware is unsupported.", L"Error", MB_ICONERROR);
+		return false;
+	}
 }
 
 INT WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _In_ LPWSTR pCmdLine, _In_ int nShowCmd) {
@@ -141,12 +151,6 @@ INT WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
 		}
 
 		wcsncpy_s(workingDir, workingDir, (wcsrchr(workingDir, L'\\') + 1) - workingDir);
-
-		//query for necessary programs and paths
-			//check that we're running as admin
-			//check that atiapfxx exists
-			//check that AMD Event service is running
-			//check that there's a User.blb already
 
 		HRESULT res;
 		wchar_t* sys32Path = NULL;
