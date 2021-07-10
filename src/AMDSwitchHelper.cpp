@@ -77,6 +77,7 @@ INT WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
 	HWND windowHandle = CreateWindow(windowClass.lpszClassName, windowClass.lpszClassName, WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, NULL, NULL, hInstance, NULL);
 	if (windowHandle != 0) {
 		ShowWindow(windowHandle, NULL);
+
 		//get working path for executable
 		GetModuleFileName(NULL, workingDir, sizeof(workingDir));
 
@@ -95,14 +96,18 @@ INT WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
 					return 0;
 				}
 				else {
-					UninstallRegistryKeys();
-					MessageBox(windowHandle, L"Unregistered application from right-click menu. Run this application again to install it, or delete it to complete uninstallation.", L"Info", MB_ICONINFORMATION);
+					if (UninstallRegistryKeys()) {
+						MessageBox(windowHandle, L"Unregistered application from right-click menu. Run this application again to install it, or delete it to complete uninstallation.", L"Info", MB_ICONINFORMATION);
+					} else {
+						MessageBox(windowHandle, L"Failed to unregister application from right-click menu!", L"Error", MB_ICONERROR);
+					}
+
 					return 0;
 				}
 			}
 			else {
 				InstallRegistryKeys();
-				wstring msg = L"Installed application. Right-click any executable or shortcut and use the AMDSwitchHelper menu to associate that application with a GPU.";
+				MessageBox(windowHandle, L"Installed application!\nRight-click any executable or shortcut and use the AMDSwitchHelper menu to associate that application with a GPU.", L"Success!", MB_ICONINFORMATION);
 				return 0;
 			}
 		}

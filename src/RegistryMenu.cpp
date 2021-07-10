@@ -37,8 +37,25 @@ bool IsRegistryInstallCurrentPath(wchar_t* currWorkingDir) {
 	return res;
 }
 
-void UninstallRegistryKeys() {
-	//
+bool UninstallRegistryKeys() {
+	//TODO: remove profile keys as well, just in case
+	bool res = false;
+	HKEY mainRegTree = NULL;
+	if (RegOpenKeyEx(APP_MAIN_REG_KEY, REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS | KEY_WOW64_64KEY, &mainRegTree) == ERROR_SUCCESS) {
+		//delete all subkeys and values first
+		if (RegDeleteTree(mainRegTree, NULL) == ERROR_SUCCESS) {
+			HKEY mainRegKey = NULL;
+			//open main key
+			if (RegOpenKeyEx(APP_MAIN_DELETE_KEY, REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS | KEY_WOW64_64KEY, &mainRegKey) == ERROR_SUCCESS) {
+				//delete main key
+				if (RegDeleteKey(mainRegKey, L"AMDSwitchHelper") == ERROR_SUCCESS) {
+					res = true;
+				}
+			}
+		}
+	}
+
+	return res;
 }
 
 void InstallRegistryKeys() {
