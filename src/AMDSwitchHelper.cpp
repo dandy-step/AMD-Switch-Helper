@@ -60,10 +60,38 @@ bool CheckApplicationRequirements(HWND windowHandle) {
 		}
 	}
 
-	//profile generator exists check
-	//FindFirstFile()
+	//AMD generator search
+	wchar_t* sys32Path;
+	HRESULT res = SHGetKnownFolderPath(FOLDERID_System, 0, 0, (PWSTR*)&sys32Path);
+	if (res == S_OK) {
+		void* oldRedirectInfo = NULL;
+		wchar_t filePath[1024] = L"";
+		wcscat_s(filePath, sys32Path);
+		wcscat_s(filePath, profilePathFileName);
+
+		WIN32_FIND_DATA findData = {};
+		Wow64DisableWow64FsRedirection(&oldRedirectInfo);
+
+		HANDLE genSearchHandle = FindFirstFile(filePath, &findData);
+		if (genSearchHandle == INVALID_HANDLE_VALUE) {
+			FindClose(genSearchHandle);
+			MessageBox(windowHandle, L"Couldn't find required driver files. Your system is not compatible, or has an unsupported driver version.", L"Error", MB_ICONERROR);
+			return false;
+		}
+	}
 	 
 	//user.blb exists check
+	WIN32_FIND_DATA findData = {};
+	wchar_t fullBlobPath[2048];
+	GetEnvironmentVariableW(L"LocalAppData", fullBlobPath, sizeof(fullBlobPath) / sizeof(wchar_t));
+	lstrcatW(fullBlobPath, blobPath);
+	HANDLE blobFileHandle = FindFirstFile(fullBlobPath, &findData);
+	if (blobFileHandle == INVALID_HANDLE_VALUE) {
+		FindClose(blobFileHandle);
+		MessageBox(windowHandle, L"Couldn't find existing profile blob - this is to be expected if you have just installed new drivers. Add at least one application manually through Catalyst Control Center to use this app. If you already have and are seeing this, it's likely that your driver version or hardware is unsupported.", L"Error", MB_ICONERROR);
+		return false;
+	}
+
 	//AMD Event service running check
 }
 
@@ -112,6 +140,8 @@ INT WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
 			}
 		}
 
+		wcsncpy_s(workingDir, workingDir, (wcsrchr(workingDir, L'\\') + 1) - workingDir);
+
 		//query for necessary programs and paths
 			//check that we're running as admin
 			//check that atiapfxx exists
@@ -120,14 +150,6 @@ INT WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
 
 		HRESULT res;
 		wchar_t* sys32Path = NULL;
-
-		//work on registry here, since we're stripping the exe name from the working path going forward
-		if (lstrlenW(pCmdLine) == 0) {
-			MessageBox(windowHandle, L"No argument passed, working on this path as registry location", L"Info", MB_ICONEXCLAMATION);
-			InstallRegistryKeys();
-		}
-
-		wcsncpy_s(workingDir, workingDir, (wcsrchr(workingDir, L'\\') + 1) - workingDir);
 
 		res = SHGetKnownFolderPath(FOLDERID_System, 0, 0, (PWSTR*)&sys32Path);
 		if (res == S_OK) {
@@ -286,7 +308,7 @@ INT WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
 							//we were given a path to an exe
 
 							exeCheck = wcsstr(exeCheck, L" ");
-							int pathSize = 0;
+							rsize_t pathSize = 0;
 							if (exeCheck) {
 								//found empty space after the path, use pointer to calculate path size and set pointer to start of args after path
 								pathSize = (exeCheck - pCmdLine);
@@ -298,7 +320,7 @@ INT WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
 							wchar_t* filePath = (wchar_t*)calloc(1, sizeof(wchar_t) * pathSize + 1);
 							(filePath, pCmdLine, pathSize);
 							if (filePath) {
-								wcsncat_s(filePath, (rsize_t)(pathSize + 1), pCmdLine, pathSize);
+								wcsncat_s(filePath, pathSize + 1, pCmdLine, pathSize);
 
 								PowerMode mode = PowerMode::GPU_PERFORMANCE;	//high performance mode by default
 								if (exeCheck) {
