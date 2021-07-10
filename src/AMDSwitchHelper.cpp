@@ -79,7 +79,7 @@ INT WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
 		ShowWindow(windowHandle, NULL);
 
 		//get working path for executable
-		GetModuleFileName(NULL, workingDir, sizeof(workingDir));
+		GetModuleFileName(NULL, workingDir, sizeof(workingDir) / sizeof(wchar_t));
 
 		if (!CheckApplicationRequirements(windowHandle)) {
 			return 0;
@@ -97,7 +97,7 @@ INT WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
 				}
 				else {
 					if (UninstallRegistryKeys()) {
-						MessageBox(windowHandle, L"Unregistered application from right-click menu. Run this application again to install it, or delete it to complete uninstallation.", L"Info", MB_ICONINFORMATION);
+						MessageBox(windowHandle, L"Unregistered application from right-click menu. Run this application again to reinstall it, or delete it to complete uninstallation.", L"Info", MB_ICONINFORMATION);
 					} else {
 						MessageBox(windowHandle, L"Failed to unregister application from right-click menu!", L"Error", MB_ICONERROR);
 					}
@@ -229,7 +229,7 @@ INT WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
 					//check for backup XML creation
 
 					wchar_t fullBlobPath[2048];
-					GetEnvironmentVariableW(L"LocalAppData", fullBlobPath, sizeof(fullBlobPath));
+					GetEnvironmentVariableW(L"LocalAppData", fullBlobPath, sizeof(fullBlobPath) / sizeof(wchar_t));
 					lstrcatW(fullBlobPath, blobPath);
 					FILE* blobFile;
 					_wfopen_s(&blobFile, fullBlobPath, L"rb");
@@ -297,27 +297,31 @@ INT WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
 
 							wchar_t* filePath = (wchar_t*)calloc(1, sizeof(wchar_t) * pathSize + 1);
 							(filePath, pCmdLine, pathSize);
-							wcsncat_s(filePath, pathSize + 1, pCmdLine, pathSize);
+							if (filePath) {
+								wcsncat_s(filePath, (rsize_t)(pathSize + 1), pCmdLine, pathSize);
 
-							PowerMode mode = PowerMode::GPU_PERFORMANCE;	//high performance mode by default
-							if (exeCheck) {
-								//check for power mode and further args
-								wchar_t* context = NULL;
-								wchar_t* token = wcstok_s(exeCheck, L" ", &context);
-								while (token != NULL) {
-									if (!lstrcmpW(token, L"GPU_PERFORMANCE")) {
-										mode = PowerMode::GPU_PERFORMANCE;
-									} else if (!lstrcmpW(token, L"GPU_POWERSAVE")) {
-										mode = PowerMode::GPU_POWERSAVE;
-									} else if (!lstrcmpW(token, L"GPU_BASED_ON_POWER_SOURCE")) {
-										mode = PowerMode::GPU_BASED_ON_POWER_SOURCE;
+								PowerMode mode = PowerMode::GPU_PERFORMANCE;	//high performance mode by default
+								if (exeCheck) {
+									//check for power mode and further args
+									wchar_t* context = NULL;
+									wchar_t* token = wcstok_s(exeCheck, L" ", &context);
+									while (token != NULL) {
+										if (!lstrcmpW(token, L"GPU_PERFORMANCE")) {
+											mode = PowerMode::GPU_PERFORMANCE;
+										}
+										else if (!lstrcmpW(token, L"GPU_POWERSAVE")) {
+											mode = PowerMode::GPU_POWERSAVE;
+										}
+										else if (!lstrcmpW(token, L"GPU_BASED_ON_POWER_SOURCE")) {
+											mode = PowerMode::GPU_BASED_ON_POWER_SOURCE;
+										}
+
+										token = wcstok_s(NULL, L" ", &context);
 									}
-
-									token = wcstok_s(NULL, L" ", &context);
 								}
-							}
 
-							AddApplicationToXMLFile(windowHandle, filePath, mode);
+								AddApplicationToXMLFile(windowHandle, filePath, mode);
+							}
 						} else {
 							//no path given, just return?
 							return 0;
