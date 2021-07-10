@@ -77,8 +77,34 @@ INT WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
 	HWND windowHandle = CreateWindow(windowClass.lpszClassName, windowClass.lpszClassName, WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, NULL, NULL, hInstance, NULL);
 	if (windowHandle != 0) {
 		ShowWindow(windowHandle, NULL);
+		//get working path for executable
+		GetModuleFileName(NULL, workingDir, sizeof(workingDir));
+
 		if (!CheckApplicationRequirements(windowHandle)) {
 			return 0;
+		}
+
+		//handle automatic install/uninstall if we run the application without args
+		if (lstrlenW(pCmdLine) == 0) {
+			if (CheckRegistryKeyInstall()) {
+				if (!IsRegistryInstallCurrentPath(workingDir)) {
+					InstallRegistryKeys();
+					wstring msg = L"Updated application install path to ";
+					msg += workingDir;
+					MessageBox(windowHandle, msg.c_str(), L"Info", MB_ICONINFORMATION);
+					return 0;
+				}
+				else {
+					UninstallRegistryKeys();
+					MessageBox(windowHandle, L"Unregistered application from right-click menu. Run this application again to install it, or delete it to complete uninstallation.", L"Info", MB_ICONINFORMATION);
+					return 0;
+				}
+			}
+			else {
+				InstallRegistryKeys();
+				wstring msg = L"Installed application. Right-click any executable or shortcut and use the AMDSwitchHelper menu to associate that application with a GPU.";
+				return 0;
+			}
 		}
 
 		//query for necessary programs and paths
@@ -90,13 +116,10 @@ INT WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
 		HRESULT res;
 		wchar_t* sys32Path = NULL;
 
-		//get working path for executable
-		GetModuleFileName(NULL, workingDir, sizeof(workingDir));
-
 		//work on registry here, since we're stripping the exe name from the working path going forward
 		if (lstrlenW(pCmdLine) == 0) {
 			MessageBox(windowHandle, L"No argument passed, working on this path as registry location", L"Info", MB_ICONEXCLAMATION);
-			CheckAndUpdateRegistryKeys();
+			InstallRegistryKeys();
 		}
 
 		wcsncpy_s(workingDir, workingDir, (wcsrchr(workingDir, L'\\') + 1) - workingDir);
