@@ -111,7 +111,7 @@ INT WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
 			WIN32_FIND_DATA findData = {};
 			Wow64DisableWow64FsRedirection(&oldRedirectInfo);
 
-			HANDLE searchHandle = FindFirstFileW(filePath, &findData);
+			HANDLE searchHandle = FindFirstFile(filePath, &findData);
 			while (searchHandle != INVALID_HANDLE_VALUE) {
 				if (lstrcmpW(findData.cFileName, L"atiapfxx.exe") == 0) {
 
@@ -244,6 +244,7 @@ INT WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
 						if (!FindNextFileW(backupFileSearchHandle, &backupFindData)) {
 							if (GetLastError() == ERROR_NO_MORE_FILES) {
 								backupFileSearchHandle = INVALID_HANDLE_VALUE;
+								FindClose(backupFileSearchHandle);
 							} else {
 								//failed, but not because it couldn't find more files
 							}
@@ -305,6 +306,7 @@ INT WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
 					generateBlobCommand += fullBlobPath;
 					generateBlobCommand += L"\" -l blobgen.log";
 					ShellExecute(windowHandle, L"open", filePath, generateBlobCommand.c_str(), workingDir, SW_SHOWMAXIMIZED);
+					FindClose(searchHandle);
 					searchHandle = INVALID_HANDLE_VALUE;
 
 					//must kill AMD External Events Utility service
@@ -351,6 +353,7 @@ INT WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
 				else {
 					if (!FindNextFileW(searchHandle, &findData)) {
 						DWORD ERR = GetLastError();
+						FindClose(searchHandle);
 						searchHandle = INVALID_HANDLE_VALUE;
 					}
 				}
@@ -448,6 +451,7 @@ void AddApplicationToXMLFile(HWND wHandle, wchar_t* filePath, PowerMode mode) {
 				}
 
 				fclose(xmlFile);
+				FindClose(searchResult);
 			}
 		}
 	}

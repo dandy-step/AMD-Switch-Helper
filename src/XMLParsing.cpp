@@ -176,7 +176,7 @@ bool TroubleUnicodeCheck(HWND windowHandle, XMLAppEntry* entry) {
 	}
 
 	//check for escape characters
-	for (int i = 0; i < sizeof(escapeCharacters); i++) {
+	for (int i = 0; i < sizeof(escapeCharacters) / sizeof(wchar_t); i++) {
 		size_t findPos = fixedPath.find(escapeCharacters[i]);
 		while (findPos != std::wstring::npos) {
 			wchar_t ampersandReplacement[] = L"&amp;";
@@ -196,7 +196,8 @@ bool TroubleUnicodeCheck(HWND windowHandle, XMLAppEntry* entry) {
 		WIN32_FIND_DATA findData = {};
 		HANDLE fileHandle = FindFirstFile(fullPath.c_str(), &findData);
 		if (fileHandle != INVALID_HANDLE_VALUE) {
-			//ask for rename file permission
+			//ask for rename file permission, because it currently exists
+			FindClose(fileHandle);
 			infoMessage += L"\"\nThis path exists, but in order to process it, we need to rename the path\n(new path: ";
 			infoMessage += fixedPath;
 			infoMessage += L"\")";
@@ -206,7 +207,8 @@ bool TroubleUnicodeCheck(HWND windowHandle, XMLAppEntry* entry) {
 				fixPath = true;
 			}
 		} else {
-			infoMessage += L"\, which needs to be renamed in order to proceed.\nThis path doesn't currently exist, so it's likely an old application you have deleted or moved in the meantime. Renamed it to ";
+			//just rename it, because it doesn't exist, but tell user
+			infoMessage += L"\, which needs to be renamed in order to proceed.\nThis path doesn't currently exist, so it's likely an old application you have deleted or moved in the meantime. Changed to ";
 			infoMessage += fixedPath;
 			MessageBox(windowHandle, infoMessage.c_str(), L"", MB_ICONQUESTION);
 			fixPath = true;
