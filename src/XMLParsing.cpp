@@ -187,48 +187,48 @@ bool TroubleUnicodeCheck(HWND windowHandle, XMLAppEntry* entry) {
 	}
 
 
-	if (needToFixPath) {
-		//if path exists, ask user for permission to replace, else just replace
-		bool fixPath = false;
-		wstring infoMessage = L"Found entry with troublesome path \"";
-		infoMessage += fullPath.c_str();
+	//if (needToFixPath) {
+	//	//if path exists, ask user for permission to replace, else just replace
+	//	bool fixPath = false;
+	//	wstring infoMessage = L"Found entry with troublesome path \"";
+	//	infoMessage += fullPath.c_str();
 
-		WIN32_FIND_DATA findData = {};
-		HANDLE fileHandle = FindFirstFile(fullPath.c_str(), &findData);
-		if (fileHandle != INVALID_HANDLE_VALUE) {
-			//ask for rename file permission
-			infoMessage += L"\"\nThis path exists, but in order to process it, we need to rename the path\n(new path: ";
-			infoMessage += fixedPath;
-			infoMessage += L"\")";
-			infoMessage += L"\nIs this acceptable? Alternatively, you could manually rename it outside of this application.";
-			int promptValue = MessageBox(windowHandle, infoMessage.c_str(), L"", MB_ICONQUESTION | MB_YESNOCANCEL);
-			if (promptValue == IDYES) {
-				fixPath = true;
-			}
-		} else {
-			infoMessage += L"\, which needs to be renamed in order to proceed.\nThis path doesn't currently exist, so it's likely an old application you have deleted or moved in the meantime. Renamed it to ";
-			infoMessage += fixedPath;
-			MessageBox(windowHandle, infoMessage.c_str(), L"", MB_ICONQUESTION);
-			fixPath = true;
-		}
+	//	WIN32_FIND_DATA findData = {};
+	//	HANDLE fileHandle = FindFirstFile(fullPath.c_str(), &findData);
+	//	if (fileHandle != INVALID_HANDLE_VALUE) {
+	//		//ask for rename file permission
+	//		infoMessage += L"\"\nThis path exists, but in order to process it, we need to rename the path\n(new path: ";
+	//		infoMessage += fixedPath;
+	//		infoMessage += L"\")";
+	//		infoMessage += L"\nIs this acceptable? Alternatively, you could manually rename it outside of this application.";
+	//		int promptValue = MessageBox(windowHandle, infoMessage.c_str(), L"", MB_ICONQUESTION | MB_YESNOCANCEL);
+	//		if (promptValue == IDYES) {
+	//			fixPath = true;
+	//		}
+	//	} else {
+	//		infoMessage += L"\, which needs to be renamed in order to proceed.\nThis path doesn't currently exist, so it's likely an old application you have deleted or moved in the meantime. Renamed it to ";
+	//		infoMessage += fixedPath;
+	//		MessageBox(windowHandle, infoMessage.c_str(), L"", MB_ICONQUESTION);
+	//		fixPath = true;
+	//	}
 
-		if (fixPath) {
-			wstring newPath = fixedPath.substr(0, fixedPath.find_last_of(L'\\'));
-			wstring newExeName = fixedPath.substr(fixedPath.find_last_of(L'\\') + 1);
-			if (entry->filePath) {
-				free(entry->filePath);
-			}
+	//	if (fixPath) {
+	//		wstring newPath = fixedPath.substr(0, fixedPath.find_last_of(L'\\'));
+	//		wstring newExeName = fixedPath.substr(fixedPath.find_last_of(L'\\') + 1);
+	//		if (entry->filePath) {
+	//			free(entry->filePath);
+	//		}
 
-			if (entry->exeName) {
-				free(entry->exeName);
-			}
+	//		if (entry->exeName) {
+	//			free(entry->exeName);
+	//		}
 
-			entry->filePath = (wchar_t*)calloc(newPath.length(), sizeof(wchar_t));
-			entry->exeName = (wchar_t*)calloc(newExeName.length(), sizeof(wchar_t));
-			lstrcatW(entry->filePath, newPath.c_str());
-			lstrcatW(entry->exeName, newExeName.c_str());
-		}
-	}
+	//		entry->filePath = (wchar_t*)calloc(newPath.length(), sizeof(wchar_t));
+	//		entry->exeName = (wchar_t*)calloc(newExeName.length(), sizeof(wchar_t));
+	//		lstrcatW(entry->filePath, newPath.c_str());
+	//		lstrcatW(entry->exeName, newExeName.c_str());
+	//	}
+	//}
 
 	return true;
 }
