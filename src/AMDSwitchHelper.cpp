@@ -77,8 +77,39 @@ INT WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
 	HWND windowHandle = CreateWindow(windowClass.lpszClassName, windowClass.lpszClassName, WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, NULL, NULL, hInstance, NULL);
 	if (windowHandle != 0) {
 		ShowWindow(windowHandle, NULL);
+
+		//get working path for executable
+		GetModuleFileName(NULL, workingDir, sizeof(workingDir));
+
 		if (!CheckApplicationRequirements(windowHandle)) {
 			return 0;
+		}
+
+		//handle automatic install/uninstall if we run the application without args
+		if (lstrlenW(pCmdLine) == 0) {
+			if (CheckRegistryKeyInstall()) {
+				if (!IsRegistryInstallCurrentPath(workingDir)) {
+					InstallRegistryKeys();
+					wstring msg = L"Updated application install path to ";
+					msg += workingDir;
+					MessageBox(windowHandle, msg.c_str(), L"Info", MB_ICONINFORMATION);
+					return 0;
+				}
+				else {
+					if (UninstallRegistryKeys()) {
+						MessageBox(windowHandle, L"Unregistered application from right-click menu. Run this application again to install it, or delete it to complete uninstallation.", L"Info", MB_ICONINFORMATION);
+					} else {
+						MessageBox(windowHandle, L"Failed to unregister application from right-click menu!", L"Error", MB_ICONERROR);
+					}
+
+					return 0;
+				}
+			}
+			else {
+				InstallRegistryKeys();
+				MessageBox(windowHandle, L"Installed application!\nRight-click any executable or shortcut and use the AMDSwitchHelper menu to associate that application with a GPU.", L"Success!", MB_ICONINFORMATION);
+				return 0;
+			}
 		}
 
 		//query for necessary programs and paths
@@ -90,13 +121,10 @@ INT WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
 		HRESULT res;
 		wchar_t* sys32Path = NULL;
 
-		//get working path for executable
-		GetModuleFileName(NULL, workingDir, sizeof(workingDir));
-
 		//work on registry here, since we're stripping the exe name from the working path going forward
 		if (lstrlenW(pCmdLine) == 0) {
 			MessageBox(windowHandle, L"No argument passed, working on this path as registry location", L"Info", MB_ICONEXCLAMATION);
-			CheckAndUpdateRegistryKeys();
+			InstallRegistryKeys();
 		}
 
 		wcsncpy_s(workingDir, workingDir, (wcsrchr(workingDir, L'\\') + 1) - workingDir);
@@ -111,7 +139,7 @@ INT WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
 			WIN32_FIND_DATA findData = {};
 			Wow64DisableWow64FsRedirection(&oldRedirectInfo);
 
-			HANDLE searchHandle = FindFirstFileW(filePath, &findData);
+			HANDLE searchHandle = FindFirstFile(filePath, &findData);
 			while (searchHandle != INVALID_HANDLE_VALUE) {
 				if (lstrcmpW(findData.cFileName, L"atiapfxx.exe") == 0) {
 
@@ -244,6 +272,7 @@ INT WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
 						if (!FindNextFileW(backupFileSearchHandle, &backupFindData)) {
 							if (GetLastError() == ERROR_NO_MORE_FILES) {
 								backupFileSearchHandle = INVALID_HANDLE_VALUE;
+								FindClose(backupFileSearchHandle);
 							} else {
 								//failed, but not because it couldn't find more files
 							}
@@ -305,6 +334,7 @@ INT WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
 					generateBlobCommand += fullBlobPath;
 					generateBlobCommand += L"\" -l blobgen.log";
 					ShellExecute(windowHandle, L"open", filePath, generateBlobCommand.c_str(), workingDir, SW_SHOWMAXIMIZED);
+					FindClose(searchHandle);
 					searchHandle = INVALID_HANDLE_VALUE;
 
 					//must kill AMD External Events Utility service
@@ -351,6 +381,7 @@ INT WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
 				else {
 					if (!FindNextFileW(searchHandle, &findData)) {
 						DWORD ERR = GetLastError();
+						FindClose(searchHandle);
 						searchHandle = INVALID_HANDLE_VALUE;
 					}
 				}
@@ -448,6 +479,7 @@ void AddApplicationToXMLFile(HWND wHandle, wchar_t* filePath, PowerMode mode) {
 				}
 
 				fclose(xmlFile);
+				FindClose(searchResult);
 			}
 		}
 	}

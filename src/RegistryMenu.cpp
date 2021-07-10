@@ -1,13 +1,71 @@
 #include "RegistryMenu.h"
 
-void CheckAndUpdateRegistryKeys() {
+bool CheckRegistryKeyInstall() {
+	//check if our keys exist
+	HKEY exeFileKey = NULL;
+	if (RegOpenKeyEx(APP_MAIN_REG_KEY, REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS | KEY_WOW64_64KEY, &exeFileKey) == ERROR_SUCCESS) {
+		RegCloseKey(exeFileKey);
+		return true;
+	} else {
+		return false;
+	}
+}
+
+bool IsRegistryInstallCurrentPath(wchar_t* currWorkingDir) {
+	bool res = false;
+	HKEY performanceCmdKey = NULL;
+	void* buff = NULL;
+
+	if (RegOpenKeyEx(APP_PERFORMANCE_REG_KEY_COMMAND, REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS | KEY_WOW64_64KEY, &performanceCmdKey) == ERROR_SUCCESS) {
+		DWORD dataSize = 4096;
+		buff = calloc(1, dataSize);
+		if (buff) {
+			HKEY perfCommandKey = NULL;
+			if (RegGetValue(performanceCmdKey, NULL, NULL, RRF_RT_REG_SZ | RRF_SUBKEY_WOW6464KEY, NULL, buff, &dataSize) == ERROR_SUCCESS) {
+				wstring commandString = (wchar_t*)buff;
+				if (commandString.rfind(currWorkingDir, 0) != wstring::npos) {
+					res = true;
+				}
+			}
+		}
+	}
+
+	if (buff) {
+		free(buff);
+	}
+
+	return res;
+}
+
+bool UninstallRegistryKeys() {
+	//TODO: remove profile keys as well, just in case
+	bool res = false;
+	HKEY mainRegTree = NULL;
+	if (RegOpenKeyEx(APP_MAIN_REG_KEY, REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS | KEY_WOW64_64KEY, &mainRegTree) == ERROR_SUCCESS) {
+		//delete all subkeys and values first
+		if (RegDeleteTree(mainRegTree, NULL) == ERROR_SUCCESS) {
+			HKEY mainRegKey = NULL;
+			//open main key
+			if (RegOpenKeyEx(APP_MAIN_DELETE_KEY, REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS | KEY_WOW64_64KEY, &mainRegKey) == ERROR_SUCCESS) {
+				//delete main key
+				if (RegDeleteKey(mainRegKey, L"AMDSwitchHelper") == ERROR_SUCCESS) {
+					res = true;
+				}
+			}
+		}
+	}
+
+	return res;
+}
+
+void InstallRegistryKeys() {
 	HKEY exefileKey = NULL;
 	HKEY performanceKey = NULL;
 	HKEY powersaveKey = NULL;
 	HKEY basedOnPowerKey = NULL;
 	DWORD keyDisposition = NULL;
 
-	if (RegCreateKeyEx(HKEY_CLASSES_ROOT, L"exefile\\shell\\AMDSwitchHelper", NULL, NULL, REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS, NULL, &exefileKey, &keyDisposition) == ERROR_SUCCESS) {
+	if (RegCreateKeyEx(APP_MAIN_REG_KEY, NULL, NULL, REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS, NULL, &exefileKey, &keyDisposition) == ERROR_SUCCESS) {
 		LSTATUS errCode = NULL;
 		wchar_t appMUIVerb[] = L"AMDSwitchHelper";
 		wchar_t appSubCommands[] = L"AMDSwitchHelper.GPUPerformance;AMDSwitchHelper.GPUPowersave;AMDSwitchHelper.GPUBasedOnPowerSource";
@@ -15,7 +73,7 @@ void CheckAndUpdateRegistryKeys() {
 		errCode = RegSetValueEx(exefileKey, L"MUIVerb", NULL, REG_SZ, (BYTE*)appMUIVerb, sizeof(appMUIVerb));
 		errCode = RegSetValueEx(exefileKey, L"SubCommands", NULL, REG_SZ, (BYTE*)appSubCommands, sizeof(appSubCommands));
 
-		if (RegCreateKeyEx(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\CommandStore\\shell\\AMDSwitchHelper.GPUPerformance", NULL, NULL, REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS | KEY_WOW64_64KEY, NULL, &performanceKey, &keyDisposition) == ERROR_SUCCESS) {
+		if (RegCreateKeyEx(APP_PERFORMANCE_REG_KEY, NULL, NULL, REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS | KEY_WOW64_64KEY, NULL, &performanceKey, &keyDisposition) == ERROR_SUCCESS) {
 			HKEY performanceCommand = NULL;
 
 			wchar_t performanceOptionText[] = L"With Dedicated GPU";
@@ -36,7 +94,7 @@ void CheckAndUpdateRegistryKeys() {
 			free(performanceIconPath);
 		}
 
-		if (RegCreateKeyEx(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\CommandStore\\shell\\AMDSwitchHelper.GPUPowersave", NULL, NULL, REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS | KEY_WOW64_64KEY, NULL, &powersaveKey, &keyDisposition) == ERROR_SUCCESS) {
+		if (RegCreateKeyEx(APP_POWERSAVE_REG_KEY, NULL, NULL, REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS | KEY_WOW64_64KEY, NULL, &powersaveKey, &keyDisposition) == ERROR_SUCCESS) {
 			HKEY powersaveCommand = NULL;
 			wchar_t powersaveOptionText[] = L"With Integrated GPU";
 			wchar_t* powersaveIconPath = (wchar_t*)calloc(sizeof(workingDir), sizeof(wchar_t));
@@ -56,7 +114,7 @@ void CheckAndUpdateRegistryKeys() {
 			free(powersaveIconPath);
 		}
 
-		if (RegCreateKeyEx(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\CommandStore\\shell\\AMDSwitchHelper.GPUBasedOnPowerSource", NULL, NULL, REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS | KEY_WOW64_64KEY, NULL, &basedOnPowerKey, &keyDisposition) == ERROR_SUCCESS) {
+		if (RegCreateKeyEx(APP_POWERSOURCE_REG_KEY, NULL, NULL, REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS | KEY_WOW64_64KEY, NULL, &basedOnPowerKey, &keyDisposition) == ERROR_SUCCESS) {
 			HKEY basedOnPowerCommand = NULL;
 			wchar_t basedOnPowerOptionText[] = L"Based On Power Source";
 			wchar_t* basedOnPowerIconPath = (wchar_t*)calloc(sizeof(workingDir), sizeof(wchar_t));
